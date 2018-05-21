@@ -1,6 +1,4 @@
-
 from utils import *
-
 
 row_units = [cross(r, cols) for r in rows]
 column_units = [cross(rows, c) for c in cols]
@@ -8,16 +6,24 @@ square_units = [cross(rs, cs) for rs in ('ABC','DEF','GHI') for cs in ('123','45
 unitlist = row_units + column_units + square_units
 
 # TODO: Update the unit list to add the new diagonal units
-unitlist = unitlist
+#diagonals_1  = ['A1','B2','C3','D4','E5','F6','G7','H8','I9']
+#diagonals_2 = ['A9','B8','C7','D6','E5','F4','G3','H2','I1']
+diagonal_units = [[rows[i] + cols[i] for i in range(9)], [rows[::-1][i] + cols[i] for i in range(9)]]
+#unitlist = unitlist +[diagonals_1,diagonals_2]
 
+unitlist = unitlist + diagonal_units
 
 # Must be called after all units (including diagonals) are added to the unitlist
 units = extract_units(unitlist, boxes)
 peers = extract_peers(units, boxes)
 
-
 def naked_twins(values):
     """Eliminate values using the naked twins strategy.
+
+    The naked twins strategy says that if you have two or more unallocated boxes
+    in a unit and there are only two digits that can go in those two boxes, then
+    those two digits can be eliminated from the possible assignments of all other
+    boxes in the same unit.
 
     Parameters
     ----------
@@ -42,11 +48,36 @@ def naked_twins(values):
     The first convention is preferred for consistency with the other strategies,
     and because it is simpler (since the reduce_puzzle function already calls this
     strategy repeatedly).
-    """
-    # TODO: Implement this function!
-    raise NotImplementedError
+    """    
+    # Find all instances of naked twins
+    
+    naked_pairs = [(twin1,twin2) for twin1 in values.keys() for twin2 in peers[twin1] if values[twin2] == values[twin1] and len(values[twin2])==2]
+    
+    for box1, box2 in naked_pairs:        
+        peer1 = set(peers[box1])
+        peer2 = set(peers[box2])
+                
+        peers_intersection = peer1.intersection(peer2)     
+        
+        for peer_box in peers_intersection:
+            for vals in values[box1]:
+                values = assign_value(values, peer_box, values[peer_box].replace(vals,''))
+        
+    #dlist = [box for box in values.keys() if len(values[box]) == 2]    
+    
+    #for box in dlist:            
+    #        for peer in peers[box]:
+    #            if values[box] == values[peer] and len(values[peer]) == 2:                    
+    #                for elem in list(set(peers[box]).intersection(peers[peer])):
+    #                    dig1 = values[box][0]
+    #                    dig2 = values[box][1]
+    #                    if dig1 in values[elem]:
+    #                        values[elem] = values[elem].replace(dig1,'')
+    #                    if dig2 in values[elem]:
+    #                       values[elem] = values[elem].replace(dig2,'')                               							
 
-
+    return values
+    
 def eliminate(values):
     """Apply the eliminate strategy to a Sudoku puzzle
 
@@ -62,10 +93,14 @@ def eliminate(values):
     -------
     dict
         The values dictionary with the assigned values eliminated from peers
-    """
-    # TODO: Copy your code from the classroom to complete this function
-    raise NotImplementedError
-
+    """    
+    solved_values = [box for box in values.keys() if len(values[box]) == 1]
+    for box in solved_values:
+        digit = values[box]
+        for peer in peers[box]:
+            values[peer] = values[peer].replace(digit,'')
+    return values
+    
 
 def only_choice(values):
     """Apply the only choice strategy to a Sudoku puzzle
@@ -86,9 +121,13 @@ def only_choice(values):
     Notes
     -----
     You should be able to complete this function by copying your code from the classroom
-    """
-    # TODO: Copy your code from the classroom to complete this function
-    raise NotImplementedError
+    """    
+    for unit in unitlist:
+        for digit in '123456789':
+            dplaces = [box for box in unit if digit in values[box]]
+            if len(dplaces) == 1:
+                values[dplaces[0]] = digit
+    return values
 
 
 def reduce_puzzle(values):
@@ -105,8 +144,19 @@ def reduce_puzzle(values):
         The values dictionary after continued application of the constraint strategies
         no longer produces any changes, or False if the puzzle is unsolvable 
     """
-    # TODO: Copy your code from the classroom and modify it to complete this function
-    raise NotImplementedError
+    
+    solved_values = [box for box in values.keys() if len(values[box]) == 1]
+    stalled = False
+    while not stalled:
+        solved_values_before = len([box for box in values.keys() if len(values[box]) == 1])        
+        values = eliminate(values)
+        values = only_choice(values)        
+        values = naked_twins(values)
+        solved_values_after = len([box for box in values.keys() if len(values[box]) == 1])
+        stalled = solved_values_before == solved_values_after
+        if len([box for box in values.keys() if len(values[box]) == 0]):
+            return False
+    return values
 
 
 def search(values):
@@ -128,10 +178,21 @@ def search(values):
     You should be able to complete this function by copying your code from the classroom
     and extending it to call the naked twins strategy.
     """
-    # TODO: Copy your code from the classroom to complete this function
-    raise NotImplementedError
-
-
+    values = reduce_puzzle(values)
+    if values is False:
+        return False ## Failed earlier
+    if all(len(values[s]) == 1 for s in boxes): 
+        return values ## Solved!
+    # Choose one of the unfilled squares with the fewest possibilities
+    n,s = min((len(values[s]), s) for s in boxes if len(values[s]) > 1)
+    # Now use recurrence to solve each one of the resulting sudokus, and 
+    for value in values[s]:
+        new_sudoku = values.copy()
+        new_sudoku[s] = value
+        attempt = search(new_sudoku)
+        if attempt:
+            return attempt
+        
 def solve(grid):
     """Find the solution to a Sudoku puzzle using search and constraint propagation
 
